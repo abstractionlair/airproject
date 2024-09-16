@@ -8,8 +8,12 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.12"
 click = "^8.1.7"
-anthropic = "^0.34.1"
+anthropic = "^0.34.2"
+openai = "^1.44.1"
 
+
+[tool.poetry.group.dev.dependencies]
+debugpy = "^1.8.5"
 
 [build-system]
 requires = ["poetry-core"]

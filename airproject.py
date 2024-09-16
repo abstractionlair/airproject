@@ -3,7 +3,7 @@ import os
 import json
 from datetime import datetime
 from anthropic import Anthropic, APIError, RateLimitError, BadRequestError
-from anthropic.types import ContentBlock, Message, MessageStreamEvent
+from anthropic.types import ContentBlock, MessageParam, ToolParam, ToolResultBlockParam
 
 BaseSPrompt = """
 ### Shared Part of System Prompt ###
@@ -21,6 +21,8 @@ When interacting within a project, follow these guidelines:
 * Offer suggestions for improving project workflows or highlighting relevant insights from project materials.
 
 Your goal is to enhance productivity and collaboration by providing highly relevant, context-aware assistance tailored to each unique project environment.
+
+You and the associated code are still in development. When things do not seem as expected there is a good chance the reason is that we have a bug.
 """
 
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
@@ -71,8 +73,19 @@ def handle_tool_use(content_block: ContentBlock):
         if content_block.type != 'tool_use':
             return None
         
-        function_name = content_block.text
-        arguments = json.loads(content_block.tool_calls[0].parameters)
+        print(f"ToolUseBlock structure: {content_block}")
+        
+        # Try to access tool_call or tool_calls
+        if hasattr(content_block, 'tool_call'):
+            tool_call = content_block.tool_call
+        elif hasattr(content_block, 'tool_calls') and len(content_block.tool_calls) > 0:
+            tool_call = content_block.tool_calls[0]
+        else:
+            print(f"Unexpected ToolUseBlock structure: {content_block}")
+            return None
+        
+        function_name = tool_call.function.name
+        arguments = json.loads(tool_call.function.arguments)
         
         if function_name == 'read_file':
             return read_file(arguments['filename'])
@@ -91,6 +104,7 @@ def handle_tool_use(content_block: ContentBlock):
     except KeyError as e:
         return f"Error: Missing required argument {str(e)}"
     except Exception as e:
+        print(f"Error in handle_tool_use: {str(e)}")
         return f"Error: {str(e)}"
 
 @cli.command()
@@ -107,7 +121,7 @@ def init():
     
     with open('.aiproject.json', 'w') as f:
         json.dump(project_config, f, indent=2)
-    
+        
     os.makedirs('conversations', exist_ok=True)
     
     click.echo("Project initialized successfully.")
@@ -117,7 +131,7 @@ def list():
     """List all conversations in the project"""
     ensure_project_initialized()
     
-    conversations = os.listdir('conversations')
+    conversations = list_files()
     if not conversations:
         click.echo("No conversations found.")
         return
@@ -142,9 +156,36 @@ def new(filename):
         f.write(f"Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
         f.write("## User\n")
         f.write("Enter your message here.\n")
-    
+        
     click.echo(f"New conversation file '{filename}' created.")
     click.echo("You can now edit the file and use 'aiproject submit' to start the conversation.")
+
+def process_response(response, filepath):
+    tool_calls = []
+    with open(filepath, 'a') as f:
+        f.write(f"\n\n## Assistant\nTimestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        for content in response.content:
+            if content.type == 'text':
+                f.write(content.text)
+                print(content.text)
+            elif content.type == 'tool_use':
+                tool_calls.append(content)
+    return tool_calls
+
+def process_stream(stream, filepath):
+    tool_calls = []
+    with open(filepath, 'a') as f:
+        f.write(f"\n\n## Assistant\nTimestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        for text in stream.text_stream:
+            print(text, end="", flush=True)
+            f.write(text)
+    
+    if stream.messages[-1].content:
+        for content_block in stream.messages[-1].content:
+            if content_block.type == 'tool_use':
+                tool_calls.append(content_block)
+    
+    return tool_calls
 
 @cli.command()
 @click.argument('filename')
@@ -160,89 +201,152 @@ def submit(filename, stream):
     
     with open(filepath, 'r') as f:
         content = f.read()
-    
+        
     messages = [
-        {
-            "role": "user",
-            "content": content
-        }
-    ]
-    
-    tools = [
-        # ... (keep the existing tool definitions)
+        MessageParam(role="user", content=content)
     ]
 
+    tools = [
+        ToolParam(
+            name="read_file",
+            description="Reads the contents of a file and returns it as a string.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "filename": {
+                        "type": "string",
+                        "description": "The path to the file to be read."
+                    }
+                },
+                "required": ["filename"]
+            }
+        ),
+        ToolParam(
+            name="write_file",
+            description="Writes the provided content to a file.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "filename": {
+                        "type": "string",
+                        "description": "The path to the file where the content will be written."
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "The content to write into the file."
+                    }
+                },
+                "required": ["filename", "content"]
+            }
+        ),
+        ToolParam(
+            name="append_file",
+            description="Appends the provided content to the end of a file.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "filename": {
+                        "type": "string",
+                        "description": "The path to the file where the content will be appended."
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "The content to append to the file."
+                    }
+                },
+                "required": ["filename", "content"]
+            }
+        ),
+        ToolParam(
+            name="delete_file",
+            description="Deletes the specified file.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "filename": {
+                        "type": "string",
+                        "description": "The path to the file to be deleted."
+                    }
+                },
+                "required": ["filename"]
+            }
+        ),
+        ToolParam(
+            name="list_files",
+            description="Lists all files in the conversations directory.",
+            input_schema={
+                "type": "object",
+                "properties": {}
+            }
+        )
+    ]
+    
     try:
         if stream:
-            with client.messages.stream(
-                model="claude-3-opus-20240229",
-                max_tokens=1000,
-                system=BaseSPrompt,
-                messages=messages,
-                tools=tools
-            ) as stream:
-                with open(filepath, 'a') as f:
-                    f.write(f"\n\n## Assistant\nTimestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            while True:
+                with client.messages.stream(
+                        model="claude-3-sonnet-20240229",
+                        max_tokens=1000,
+                        system=BaseSPrompt,
+                        messages=messages,
+                        tools=tools
+                ) as stream:
+                    tool_calls = process_stream(stream, filepath)
                 
-                for chunk in stream:
-                    if isinstance(chunk, MessageStreamEvent):
-                        if chunk.type == "content_block_start":
-                            current_block = chunk.content_block
-                        elif chunk.type == "content_block_delta":
-                            if chunk.delta.type == "text_delta":
-                                print(chunk.delta.text, end="", flush=True)
-                                with open(filepath, 'a') as f:
-                                    f.write(chunk.delta.text)
-                        elif chunk.type == "content_block_stop":
-                            if hasattr(current_block, 'type') and current_block.type == 'tool_use':
-                                tool_result = handle_tool_use(current_block)
-                                if tool_result:
-                                    messages.append({
-                                        "role": "tool",
-                                        "name": current_block.text,
-                                        "content": tool_result
-                                    })
-                                    # Re-create the stream with updated messages
-                                    stream = client.messages.stream(
-                                        model="claude-3-opus-20240229",
-                                        max_tokens=1000,
-                                        system=BaseSPrompt,
-                                        messages=messages,
-                                        tools=tools
-                                    )
-        else:
-            response = client.messages.create(
-                model="claude-3-opus-20240229",
-                max_tokens=1000,
-                system=BaseSPrompt,
-                messages=messages,
-                tools=tools
-            )
+                if not tool_calls:
+                    break  # No more tool calls, we're done
 
-            with open(filepath, 'a') as f:
-                f.write(f"\n\n## Assistant\nTimestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-                for content in response.content:
-                    if hasattr(content, 'type'):
-                        if content.type == 'text':
-                            f.write(content.text)
-                            print(content.text)
-                        elif content.type == 'tool_use':
-                            tool_result = handle_tool_use(content)
-                            if tool_result:
-                                messages.append({
-                                    "role": "tool",
-                                    "name": content.text,
-                                    "content": tool_result
-                                })
-                                # Make another API call with the tool result
-                                response = client.messages.create(
-                                    model="claude-3-opus-20240229",
-                                    max_tokens=1000,
-                                    system=BaseSPrompt,
-                                    messages=messages,
-                                    tools=tools
-                                )
-                                # Continue processing the new response
+                for tool_call in tool_calls:
+                    tool_result = handle_tool_use(tool_call)
+                    if tool_result:
+                        print(f"Tool call structure: {tool_call}")
+                        tool_call_id = tool_call.tool_call.id if hasattr(tool_call, 'tool_call') else tool_call.tool_calls[0].id if hasattr(tool_call, 'tool_calls') else None
+                        if tool_call_id:
+                            messages.append(MessageParam(
+                                role="tool",
+                                content=[
+                                    ToolResultBlockParam(
+                                        type="tool_result",
+                                        tool_call_id=tool_call_id,
+                                        content=tool_result
+                                    )
+                                ]
+                            ))
+                        else:
+                            print(f"Unable to extract tool_call_id from: {tool_call}")
+        else:
+            while True:
+                response = client.messages.create(
+                    model="claude-3-sonnet-20240229",
+                    max_tokens=1000,
+                    system=BaseSPrompt,
+                    messages=messages,
+                    tools=tools
+                )
+
+                tool_calls = process_response(response, filepath)
+                
+                if not tool_calls:
+                    break  # No more tool calls, we're done
+
+                for tool_call in tool_calls:
+                    tool_result = handle_tool_use(tool_call)
+                    if tool_result:
+                        print(f"Tool call structure: {tool_call}")
+                        tool_call_id = tool_call.tool_call.id if hasattr(tool_call, 'tool_call') else tool_call.tool_calls[0].id if hasattr(tool_call, 'tool_calls') else None
+                        if tool_call_id:
+                            messages.append(MessageParam(
+                                role="tool",
+                                content=[
+                                    ToolResultBlockParam(
+                                        type="tool_result",
+                                        tool_call_id=tool_call_id,
+                                        content=tool_result
+                                    )
+                                ]
+                            ))
+                        else:
+                            print(f"Unable to extract tool_call_id from: {tool_call}")
 
     except BadRequestError as e:
         click.echo(f"Bad request: {e}")
@@ -250,10 +354,12 @@ def submit(filename, stream):
         click.echo(f"Rate limit exceeded: {e}")
     except APIError as e:
         click.echo(f"API error: {e}")
-    
+    except Exception as e:
+        click.echo(f"Unexpected error: {e}")
+        
     click.echo("Response received and appended to the conversation file.")
     click.echo("You can now edit the file and submit again to continue the conversation.")
-    
+
 if __name__ == '__main__':
     cli()
     
