@@ -10,6 +10,7 @@ python = "^3.12"
 click = "^8.1.7"
 anthropic = "^0.34.2"
 openai = "0.27.8"
+httpx = "<0.28"
 
 
 [tool.poetry.group.dev.dependencies]
