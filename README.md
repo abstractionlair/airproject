@@ -46,3 +46,9 @@ quite. But the diagnosis above held up — ambient context was the missing
 piece, and giving the model standing awareness of the workspace, rather
 than tools it had to think to use, is exactly what the products that
 succeeded got right.
+
+One more note, since my later repos carry provenance statements: this one
+predates coding agents, and every line here passed through my hands —
+drafted in web-chat conversations, hand-applied, and debugged by me
+personally. It's the baseline my later delegation experiments are measured
+against.
