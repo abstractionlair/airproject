@@ -318,3 +318,47 @@ streaming paths.
 
 `bs.py` (the OpenAI-side bootstrap, §5) was out of scope for this pass and was not
 touched.
+
+## 10. Postscript 2 — same day, later: the 2024 mutation capability, verified
+
+Scott ran a Codex-driven search of his own machine's disks (Google-Drive-synced
+working tree and local archives; the search across all his computers/disks is NOT yet
+complete). Findings on his machine **[SCOTT-SEARCH-VERIFIED — Codex-reported; the
+cited files live on Scott's Mac, not in this repository]**:
+
+- The Drive-synced working tree (`mysrc 2/ToGitHub/airproject/airproject.py`) has an
+  **11:57 a.m. modification time on 2024-09-11** — the debugging revision immediately
+  *before* the corrected ~12:00 conversation artifact; it still guesses `.tool_call` /
+  `.tool_calls`. Reconstruction: Scott saved and ran the 11:57 revision, obtained the
+  real `ToolUseBlock` trace at ~12:00, received the corrected file in chat — **and the
+  corrected version was never saved over the working copy.** That is, precisely, how
+  the fix was lost.
+- A further Anthropic prototype, `new_bs.py`, could not have worked as saved
+  (nonexistent constant import; `parameters` instead of `input_schema`; `tool_call`
+  instead of `tool_use`; invalid `tool` message role) — recorded 400 errors in its
+  history confirm.
+- The SDK 0.34.2 requirements (`role` ∈ {user, assistant}; `tool_use_id`) are confirmed
+  from the Drive-preserved SDK source itself (`types/message_param.py`,
+  `types/tool_result_block_param.py`).
+
+**Dynamic verification of the corrected 2024 artifact — run twice, independently:**
+Codex (on Scott's machine) and Claude (on the VPS, from the archived conversation
+`0f6afc41` — 2026-07-14) each extracted the corrected `handle_tool_use`, parsed it
+(AST clean), and invoked it with a synthetic Anthropic-shaped `ToolUseBlock` requesting
+`write_file(filename="probe.py", content="print(42)\n")`. Both runs:
+`HANDLER_RESULT = Successfully wrote to 'probe.py'.` — file content verified. The same
+artifact still constructs the tool result wrongly (`role="tool"`, `tool_call_id=`), and
+the write happens *before* that invalid follow-up request is sent. So the likely 2024
+behavior of the corrected version, had it been run: **Claude requests a write → the
+local file changes → the follow-up API request fails.** Functioning mutation
+capability; broken loop. (Local reproduction detail: the conversation contains ten
+versions of `handle_tool_use`; exactly one is corrected. An early version invoked as a
+negative control fails on `.tool_calls`, as expected.)
+
+**Revised bottom line for the Anthropic path** (refining §8, Codex's formulation,
+adopted): *"AIRproject was run against the Anthropic API and reached genuine Claude
+tool-use requests. A corrected Anthropic implementation produced during that work would
+successfully execute a requested file write, although it would then fail when returning
+the tool result. No surviving trace yet proves that Claude historically requested and
+completed a mutating tool call."* The commit titled "Bootstrap is able to read and
+write target file" remains OpenAI evidence (its `bs.py` imports OpenAI).
