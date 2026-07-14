@@ -355,6 +355,20 @@ capability; broken loop. (Local reproduction detail: the conversation contains t
 versions of `handle_tool_use`; exactly one is corrected. An early version invoked as a
 negative control fails on `.tool_calls`, as expected.)
 
+**The run timeline, decoded from the working dir's own artifacts** (conversations/
+HelloWorld2.txt + its `~` backup; the tool stamped every run): Claude-path runs span
+Sep 8 21:49 → Sep 11 **07:58** (ending in the blank-response burst). The corrected
+artifact arrived in chat ~12:00 — four hours after the last recorded run. Mechanically,
+a run of the corrected version would have left a post-noon timestamped entry in a
+conversation file *before* failing at the tool-result return, and a write test would
+have left its target file; neither exists. Together with the delivery conversation
+ending without a pasted follow-up error, and the Sep-16 commit reverting to the wrong
+pattern, the evidence leans strongly toward the corrected version never having been run
+in any located working directory. (Scott's contemporaneous workflow — code written in
+chat, copied out, run — makes a run in some never-located directory possible; the claim
+stays INDETERMINATE, but every place a run would have left marks has none.)
+**[RUNTIME + COMMIT + CONVERSATION, cross-referenced; added same day]**
+
 **Revised bottom line for the Anthropic path** (refining §8, Codex's formulation,
 adopted): *"AIRproject was run against the Anthropic API and reached genuine Claude
 tool-use requests. A corrected Anthropic implementation produced during that work would
