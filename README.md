@@ -33,9 +33,11 @@ And now we have Claude Code.
 ## Running it
 
 `airproject.py` is the Claude MVP (Click CLI, filesystem tools); `bs.py` is
-an earlier OpenAI-based bootstrap script. Note the pinned `anthropic` SDK
-(0.34.x) requires `httpx<0.28` — newer httpx removed an argument the older
-SDK still passes at client construction.
+an earlier OpenAI-based bootstrap script. As of the July-2026 rehabilitation
+(see Code Archaeology below), `airproject.py` runs against the current
+`anthropic` SDK (0.95.x, model claude-haiku-4-5) and the old pinned-SDK /
+`httpx<0.28` constraint no longer applies. `bs.py` remains period code
+(openai 0.27-era) and is not expected to run today.
 
 ---
 
@@ -52,3 +54,37 @@ predates coding agents, and every line here passed through my hands —
 drafted in web-chat conversations, hand-applied, and debugged by me
 personally. It's the baseline my later delegation experiments are measured
 against.
+
+## Code Archaeology
+
+*This section was compiled by Claude agents (July 2026) from the git history
+plus recovered 2024 conversation transcripts. Full detail, with per-claim
+evidence tags, in [docs/HISTORY.md](docs/HISTORY.md).*
+
+- **2024-08-21** — repo founded: AI pair-programming from scratch,
+  deliberately minimal.
+- **2024-08-23 (day two)** — the MVP went to a cross-model review ("Since
+  you are different from Claude...") — multi-model review from the start.
+- **2024-09-08/09** — rebuilt against the then-current SDK; the tool-use bug
+  appears. Sept 9: a real crash (`AttributeError: 'ToolUseBlock' object has
+  no attribute 'text'`) proves a live round trip was being attempted.
+- **2024-09-11** — the correct attribute-access fix was drafted in
+  conversation and verified there against a real logged `ToolUseBlock` —
+  but never committed.
+- **2024-09-16** — the commit that landed instead reverted to an
+  OpenAI-shaped `hasattr` guess; no committed state of the Claude path
+  worked, from founding until 2026.
+- **2024-09-11→20** — what demonstrably did work: the OpenAI bootstrap loop
+  (`bs.py` → `target.py`), real read/write round trips against a target
+  project.
+- **2024-09→10** — the SDK-documentation side quest described above ran
+  across Claude, ChatGPT, and a Gemini 1.5 Pro generator whose output
+  survives (dated 2024-10-04).
+- **2024-10** — wind-down, with dated context rather than a stopping declaration:
+  purpose-built tools were arriving and being evaluated ("I plan to use Cursor,"
+  Oct 8; GPT Canvas that same week) while a new job's onboarding absorbed the
+  time. Later commits are packaging and docs only.
+- **2026-07-14** — rehabilitation: the 2024 session draft landed, plus two
+  further bug layers that draft didn't cover (one only discoverable against
+  the live API), a modern SDK, and a passing live tool round trip. The loop
+  closed 22 months after the bug was first diagnosed.

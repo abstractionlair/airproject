@@ -23,6 +23,10 @@ Every claim below is tagged with its evidence type:
   history above), showing what actually happened when the code ran.
 - **[INDETERMINATE]** — the record does not resolve this question. Stated as open,
   not glossed over.
+- **[SCOTT-SEARCH-VERIFIED]** — found in Scott's own 2026-07 search of his drives and
+  Google Drive backups (Codex-assisted) and relayed into this document. The cited
+  artifacts live in private storage, not in this repository: internally consistent
+  evidence, but not publicly reproducible from the repo alone.
 
 A recurring theme in this project's history: "was discussed or drafted in chat" and
 "was committed to the repository" are not the same claim, and in the central episode
@@ -109,10 +113,10 @@ separate facts throughout.
   ever executes through this path. Downstream, the follow-up message uses
   `role="tool"` (invalid) and `tool_call_id=` (wrong key), but that code is never
   reached anyway. **[COMMIT — static analysis]**
-- **`airproject.py` has been byte-identical since this commit** — confirmed via
-  `git diff b641f60 HEAD -- airproject.py` (empty) at the time of this writing.
-  Everything below in §7 is packaging/docs, not a functional change to this file.
-  **[COMMIT]**
+- **`airproject.py` was byte-identical from this commit until the 2026-07-14
+  rehabilitation (§9)** — confirmed via `git diff b641f60 -- airproject.py` (empty)
+  against the pre-rehabilitation tree. Everything below in §7 is packaging/docs, not a
+  functional change to this file. **[COMMIT]**
 - Runtime consequence, confirmed by real output on a local (non-git) drive copy:
   `conversations/HelloWorld2.txt` shows Claude hallucinating file listings
   ("HelloWorld2.txt," then "hello_world.py.x," "README.md") that don't match the
@@ -226,11 +230,13 @@ end-to-end success statement.
 
 ## 8. Bottom line
 
-- No committed state of `airproject.py`, across the repository's full, real
-  (unsquashed) git history, ever had correct Anthropic tool-use plumbing. **[COMMIT]**
+- No committed state of `airproject.py`, from the repository's founding through the
+  2026-07-14 rehabilitation (§9), ever had correct Anthropic tool-use plumbing.
+  **[COMMIT]**
 - A correct fix for the core bug was drafted and verified against a real object repr
-  in conversation on 2024-09-11, but never made it into a commit; the commit that
-  landed five days later reverted to the earlier, wrong attribute-access guess.
+  in conversation on 2024-09-11, but did not make it into a commit until the §9
+  rehabilitation 22 months later; the commit that landed five days after the draft
+  reverted to the earlier, wrong attribute-access guess.
   **[CONVERSATION + COMMIT, cross-referenced]**
 - The loop that demonstrably read and wrote files against a real target, across
   multiple iterations, driven by real API calls, was the OpenAI-based bootstrap
@@ -260,11 +266,13 @@ Twenty-two months after the bug was found, correctly diagnosed, and then lost, t
 Anthropic-side tool-use plumbing in `airproject.py` was fixed and verified against
 the live API. Honest attribution, split by what's old and what's new:
 
-- **The core attribute-access fix is Scott's own 2024-09-11 draft, landed today.**
-  `handle_tool_use` now reads `function_name = content_block.name` /
-  `arguments = content_block.input` — exactly the fix drafted in conversation
-  `0f6afc41` on 2024-09-11 (see §3) and verified there against a real logged
-  `ToolUseBlock` repr, but never committed. That draft is landed essentially
+- **The core attribute-access fix comes from the uncommitted 2024-09-11 session
+  draft, landed today.** Authorship, precisely: Scott supplied the decisive runtime
+  evidence (the pasted `ToolUseBlock` repr) and drove the debugging; Claude authored
+  the corrected file in that session. `handle_tool_use` now reads
+  `function_name = content_block.name` / `arguments = content_block.input` — exactly
+  the fix drafted in conversation `0f6afc41` on 2024-09-11 (see §3) and verified there
+  against a real logged `ToolUseBlock` repr, but never committed. That draft is landed essentially
   verbatim: the `hasattr(content_block, 'tool_call'/'tool_calls')` guess that had
   been sitting in `handle_tool_use` since the `b641f60` commit (§4) is gone, replaced
   by the two-line fix Scott and Claude found together in 2024. The recovered draft's

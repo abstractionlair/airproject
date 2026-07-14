@@ -291,7 +291,9 @@ def submit(filename, stream):
                 tool_results = []
                 for tool_call in tool_calls:
                     tool_result = handle_tool_use(tool_call)
-                    if tool_result:
+                    # Every tool_use id must get a tool_result — "" (e.g. an
+                    # empty file) is a valid result, so test against None only.
+                    if tool_result is not None:
                         tool_results.append(ToolResultBlockParam(
                             type="tool_result",
                             tool_use_id=tool_call.id,
@@ -321,7 +323,9 @@ def submit(filename, stream):
                 tool_results = []
                 for tool_call in tool_calls:
                     tool_result = handle_tool_use(tool_call)
-                    if tool_result:
+                    # Every tool_use id must get a tool_result — "" (e.g. an
+                    # empty file) is a valid result, so test against None only.
+                    if tool_result is not None:
                         tool_results.append(ToolResultBlockParam(
                             type="tool_result",
                             tool_use_id=tool_call.id,
