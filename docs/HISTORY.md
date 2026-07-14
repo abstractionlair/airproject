@@ -165,7 +165,7 @@ the positive signals are the ones quoted above ("This is working better," and th
 run log proving real execution up to a real, later-fixed API error), not a clean
 end-to-end success statement.
 
-## 6. Later meta-work, and the open Gemini question (2024-09-25 – 10-04)
+## 6. Later meta-work, and the Gemini question (RESOLVED 2026-07-14) (2024-09-25 – 10-04)
 
 - **2024-09-25 – 09-26** — A LangChain rewrite (`ChatAnthropic` +
   `OpenAIFunctionsAgent` + `AgentExecutor`); an MVP plan with a `ModelInterface`
@@ -175,19 +175,35 @@ end-to-end success statement.
   whole current Anthropic Python SDK source and write a reference doc, to counter the
   problem of models being trained on stale SDK versions. **[CONVERSATION]** (convs
   `8cff533b`, `4a04cd8b`, `6438e282`, `b4b3aaa9`)
-- **On Gemini, specifically — OPEN, do not treat as resolved.** The one Gemini
-  mention found in the swept corpus (2024-09-26) is a failed attempt to ask Gemini's
-  *chat interface* to describe the SDK from its own training knowledge — not a script
-  calling the Gemini API to read source — and it failed: *"The generated document was
-  clearly incomplete as I could verify by looking at the official documentation."*
-  The read/write SDK-documentation work that did demonstrably run in this window used
-  the Anthropic API (Claude reading its own SDK's source), not Gemini. **Scott has
-  disputed this reading (2026-07-14): "I feel reasonably strongly that's not the
-  complete SDK -> Gemini history. I'll search."** Pending that search, this question
-  is OPEN. **[INDETERMINATE]**
+- **On Gemini, specifically — RESOLVED. [SCOTT-SEARCH-VERIFIED, 2026-07-14]**
+  The corpus-only pass (claude.ai + ChatGPT transcripts) had found only one Gemini
+  mention (2024-09-26, a failed attempt to ask Gemini's *chat interface* to describe
+  the SDK from its own training knowledge) and marked the SDK→Gemini question OPEN
+  after Scott disputed that reading: *"I feel reasonably strongly that's not the
+  complete SDK -> Gemini history. I'll search."* Scott's follow-up search, run via
+  Codex against his Google Drive (2026-07-14), confirmed his recollection: a Gemini
+  1.5 Pro documentation-generator script existed — it imports `google.generativeai`,
+  targets model `gemini-1.5-pro`, recursively gathers a project's `.py` files, and
+  writes them out as `project_documentation.md`. A generated artifact from that
+  script survives in Drive: a ~32KB / 730-line `project_documentation.md`, dated
+  2024-10-04, in the folder "mysrc 2/anthropic-sdk-python" — i.e. Gemini reading the
+  Anthropic Python SDK's own source, exactly the stale-training-data countermeasure
+  described elsewhere in this history, just on the Gemini side rather than the
+  Anthropic-API side. Minutes after that file's timestamp, Scott told Claude, verbatim:
+  *"I have let an LLM read the code for the SDK and attempt to write documentation."*
+  (conv `a10f2d55`, see below) — which this search now identifies as almost certainly
+  referring to this Gemini run, not an unnamed Anthropic-API run. Related attempts
+  found in the same search, for completeness: a Claude-driven pass on Sept 8–9
+  (`tree.txt` + `consolidated.txt`, a directory-tree-plus-concatenated-source
+  approach, not a project_documentation.md generator); a Sept 9 manual upload of the
+  SDK to ChatGPT (see §4c's `1207`/`1220`); and a Sept 26 proposed
+  Claude-3.5-Sonnet-API-driven script that was discussed but not the artifact that
+  actually produced the surviving Oct 4 documentation. **[CONVERSATION +
+  SCOTT-SEARCH-VERIFIED]**
 - **2024-10-04** — A downstream continuation: *"I have let an LLM read the code for
-  the SDK and attempt to write documentation."* The record does not name which model
-  performed this specific run. **[INDETERMINATE]** (conv `a10f2d55`)
+  the SDK and attempt to write documentation."* Per the 2026-07-14 Drive search above,
+  this almost certainly refers to the Gemini 1.5 Pro run, not an unnamed Anthropic-API
+  run. **[SCOTT-SEARCH-VERIFIED]** (conv `a10f2d55`)
 
 ## 7. Wind-down (October 2024) and no further plumbing work since
 
@@ -235,3 +251,62 @@ anything beyond what's quoted here. The claude.ai-side conversations marked
 `[title-only]` in the source history document (identified by date/title but not
 opened) are not represented here at all; treat this timeline as complete for what it
 covers, not as a guarantee that nothing else exists in the unopened set.*
+
+---
+
+## 9. Postscript — 2026-07-14: the fix lands
+
+Twenty-two months after the bug was found, correctly diagnosed, and then lost, the
+Anthropic-side tool-use plumbing in `airproject.py` was fixed and verified against
+the live API. Honest attribution, split by what's old and what's new:
+
+- **The core attribute-access fix is Scott's own 2024-09-11 draft, landed today.**
+  `handle_tool_use` now reads `function_name = content_block.name` /
+  `arguments = content_block.input` — exactly the fix drafted in conversation
+  `0f6afc41` on 2024-09-11 (see §3) and verified there against a real logged
+  `ToolUseBlock` repr, but never committed. That draft is landed essentially
+  verbatim: the `hasattr(content_block, 'tool_call'/'tool_calls')` guess that had
+  been sitting in `handle_tool_use` since the `b641f60` commit (§4) is gone, replaced
+  by the two-line fix Scott and Claude found together in 2024. The recovered draft's
+  simplified tool-call-ID extraction (`tool_call.id` read straight off the
+  `ToolUseBlock`, no more `hasattr` ternary chain) also landed, unchanged in spirit.
+- **Everything else is new, 2026 work**, made necessary by 22 months of Anthropic
+  SDK evolution plus one bug the 2024 draft itself never got past (per §3, "that draft
+  still carried two further bugs"):
+  - `role="tool"` → `role="user"`, and `tool_call_id=` → `tool_use_id=` in
+    `ToolResultBlockParam` — the two bugs the 2024-09-11 draft still had, which would
+    have 400'd at the API boundary even if that draft had been committed as-is.
+  - The streaming path's `stream.messages[-1]` — never valid against a real SDK
+    response object, and no longer present as an attribute in the current SDK at
+    all — replaced with `stream.get_final_message()`.
+  - One bug present in *every* historical and drafted version of this file, 2024
+    draft included: the assistant's `tool_use` turn was never appended back into
+    `messages` before the follow-up `tool_result` was sent. Verified live against
+    the real API (2026-07-14): sending a `tool_result` without the preceding
+    `tool_use` turn in history returns `400 invalid_request_error` — *"Each
+    `tool_result` block must have a corresponding `tool_use` block in the previous
+    message."* Fixed by appending `MessageParam(role="assistant", content=...)`
+    (the full response/`final_message` content) before appending the tool results,
+    and by batching all of a turn's tool results into one `user` message rather than
+    one message per tool call.
+  - Dependencies: `anthropic` bumped from `^0.34.2` to `^0.95.0`; the `httpx<0.28`
+    compatibility pin (added 2026-07-05, commit `ef45975`) dropped as unnecessary
+    against the current SDK.
+  - Model ID: the retired `claude-3-sonnet-20240229` replaced with
+    `claude-haiku-4-5-20251001` (cheap, current, sufficient for this tool's CRUD-tool
+    workload).
+
+**Smoke test, live against the real Anthropic API (2026-07-14), trivial spend (a
+handful of Haiku calls):** in a scratch project directory, `submit` was run once
+non-streaming and once with `--stream`, each asking Claude to call `list_files` and
+report what it found. Both completed the full round trip — tool call issued, tool
+result correctly returned to the model, coherent final reply — with **no
+hallucination**: the model's answer matched the real directory contents exactly
+(one file, then two, as files were added between runs). This is the same
+`list_files`-driven round trip that produced hallucinated file listings and an
+unbounded resubmission loop in the 2024-era `conversations/HelloWorld2.txt` runtime
+evidence described in §4 — it now completes correctly on both the non-streaming and
+streaming paths.
+
+`bs.py` (the OpenAI-side bootstrap, §5) was out of scope for this pass and was not
+touched.
