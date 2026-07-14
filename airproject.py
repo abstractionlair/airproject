@@ -72,21 +72,10 @@ def handle_tool_use(content_block: ContentBlock):
     try:
         if content_block.type != 'tool_use':
             return None
-        
-        print(f"ToolUseBlock structure: {content_block}")
-        
-        # Try to access tool_call or tool_calls
-        if hasattr(content_block, 'tool_call'):
-            tool_call = content_block.tool_call
-        elif hasattr(content_block, 'tool_calls') and len(content_block.tool_calls) > 0:
-            tool_call = content_block.tool_calls[0]
-        else:
-            print(f"Unexpected ToolUseBlock structure: {content_block}")
-            return None
-        
-        function_name = tool_call.function.name
-        arguments = json.loads(tool_call.function.arguments)
-        
+
+        function_name = content_block.name
+        arguments = content_block.input
+
         if function_name == 'read_file':
             return read_file(arguments['filename'])
         elif function_name == 'write_file':
@@ -99,8 +88,6 @@ def handle_tool_use(content_block: ContentBlock):
             return json.dumps(list_files())
         else:
             return f"Error: Unknown function '{function_name}'"
-    except json.JSONDecodeError:
-        return "Error: Invalid JSON in tool call arguments"
     except KeyError as e:
         return f"Error: Missing required argument {str(e)}"
     except Exception as e:
@@ -179,13 +166,14 @@ def process_stream(stream, filepath):
         for text in stream.text_stream:
             print(text, end="", flush=True)
             f.write(text)
-    
-    if stream.messages[-1].content:
-        for content_block in stream.messages[-1].content:
+
+    final_message = stream.get_final_message()
+    if final_message.content:
+        for content_block in final_message.content:
             if content_block.type == 'tool_use':
                 tool_calls.append(content_block)
-    
-    return tool_calls
+
+    return tool_calls, final_message
 
 @cli.command()
 @click.argument('filename')
@@ -285,39 +273,36 @@ def submit(filename, stream):
         if stream:
             while True:
                 with client.messages.stream(
-                        model="claude-3-sonnet-20240229",
+                        model="claude-haiku-4-5-20251001",
                         max_tokens=1000,
                         system=BaseSPrompt,
                         messages=messages,
                         tools=tools
                 ) as stream:
-                    tool_calls = process_stream(stream, filepath)
-                
+                    tool_calls, final_message = process_stream(stream, filepath)
+
                 if not tool_calls:
                     break  # No more tool calls, we're done
 
+                # The assistant's tool_use turn must be part of the conversation
+                # before we can send back its tool_result.
+                messages.append(MessageParam(role="assistant", content=final_message.content))
+
+                tool_results = []
                 for tool_call in tool_calls:
                     tool_result = handle_tool_use(tool_call)
                     if tool_result:
-                        print(f"Tool call structure: {tool_call}")
-                        tool_call_id = tool_call.tool_call.id if hasattr(tool_call, 'tool_call') else tool_call.tool_calls[0].id if hasattr(tool_call, 'tool_calls') else None
-                        if tool_call_id:
-                            messages.append(MessageParam(
-                                role="tool",
-                                content=[
-                                    ToolResultBlockParam(
-                                        type="tool_result",
-                                        tool_call_id=tool_call_id,
-                                        content=tool_result
-                                    )
-                                ]
-                            ))
-                        else:
-                            print(f"Unable to extract tool_call_id from: {tool_call}")
+                        tool_results.append(ToolResultBlockParam(
+                            type="tool_result",
+                            tool_use_id=tool_call.id,
+                            content=tool_result
+                        ))
+
+                messages.append(MessageParam(role="user", content=tool_results))
         else:
             while True:
                 response = client.messages.create(
-                    model="claude-3-sonnet-20240229",
+                    model="claude-haiku-4-5-20251001",
                     max_tokens=1000,
                     system=BaseSPrompt,
                     messages=messages,
@@ -325,28 +310,25 @@ def submit(filename, stream):
                 )
 
                 tool_calls = process_response(response, filepath)
-                
+
                 if not tool_calls:
                     break  # No more tool calls, we're done
 
+                # The assistant's tool_use turn must be part of the conversation
+                # before we can send back its tool_result.
+                messages.append(MessageParam(role="assistant", content=response.content))
+
+                tool_results = []
                 for tool_call in tool_calls:
                     tool_result = handle_tool_use(tool_call)
                     if tool_result:
-                        print(f"Tool call structure: {tool_call}")
-                        tool_call_id = tool_call.tool_call.id if hasattr(tool_call, 'tool_call') else tool_call.tool_calls[0].id if hasattr(tool_call, 'tool_calls') else None
-                        if tool_call_id:
-                            messages.append(MessageParam(
-                                role="tool",
-                                content=[
-                                    ToolResultBlockParam(
-                                        type="tool_result",
-                                        tool_call_id=tool_call_id,
-                                        content=tool_result
-                                    )
-                                ]
-                            ))
-                        else:
-                            print(f"Unable to extract tool_call_id from: {tool_call}")
+                        tool_results.append(ToolResultBlockParam(
+                            type="tool_result",
+                            tool_use_id=tool_call.id,
+                            content=tool_result
+                        ))
+
+                messages.append(MessageParam(role="user", content=tool_results))
 
     except BadRequestError as e:
         click.echo(f"Bad request: {e}")
