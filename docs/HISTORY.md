@@ -362,3 +362,43 @@ successfully execute a requested file write, although it would then fail when re
 the tool result. No surviving trace yet proves that Claude historically requested and
 completed a mutating tool call."* The commit titled "Bootstrap is able to read and
 write target file" remains OpenAI evidence (its `bs.py` imports OpenAI).
+
+## 11. Postscript 3 — the M4 census and two corrections
+
+Scott's Codex search of his M4 Mac Mini (2026-07-14, evening) completed the copy census
+for that machine **[SCOTT-SEARCH-VERIFIED; the decisive pCloud logs independently
+re-inspected on the VPS via its pCloud mount]**:
+
+- **Copies located:** the pCloud working dir (richest — untracked histories, backups,
+  test artifacts), a near-duplicate Google Drive workspace (`ToGitHub/airproject`,
+  including the 11:57 pre-fix revision of §10), the older standalone Drive snapshot, a
+  clean 2025 GitHub clone on a removable drive, and the GitHub repo itself — one branch,
+  no unreachable objects, no Time Machine snapshots; later commits are docs/deps/security
+  only. No further checkout on the internal disk.
+- **The OpenAI-path write is conclusively evidenced and model-identified:** GPT-4o chose
+  `write_file` in response to "Let's test writing. Can you write something to
+  test_file.txt?", and `test_file.txt`'s modification time matches the logged event to
+  the second (`airproject_history.json~` + `test_file.txt`). A read of `target.py`
+  through the loop is equally evidenced (`airproject_history.json`). Immediately after
+  each success, a history-reloading bug (a `function` message losing its `name` on
+  reload) killed the next run — fixed in a later `bs.py` revision.
+- **Correction 1 — self-modification, downgraded.** An earlier reconstruction described
+  the OpenAI loop as "evolving its own code across several iterations." Direct
+  re-inspection of `airproject_history.txt` shows: the design is explicitly
+  self-targeting (`TARGET_FILE = sys.argv[0]  # The current script is the target file`),
+  the loop READ its own source, and GPT-4o replied with a proposed revised version of
+  the script — **in message text**. No `write_file` event ever carried a self-revision.
+  Proven loop writes: `test_file.txt` only.
+- **Correction 2 — no Claude-directed write, reproduced independently.** No surviving
+  evidence anywhere of a Claude-directed file write; the recovered Sept-11 pCloud
+  `airproject.py` handler returns `None` on the real recorded `ToolUseBlock` (reproduced
+  offline by Codex, consistent with §10's dual verification of the corrected artifact).
+- **The symmetry, for the record:** on both vendor paths, the improvement reached
+  message text and died before persistence — Claude's corrected file was never saved
+  over the 11:57 working copy (§10), and GPT-4o's self-revision was never written by the
+  loop (this section). Both times the missing piece was the persistence step, not the
+  model's contribution.
+- **Maximally defensible README formulation** (Codex's, endorsed): *"An OpenAI-based
+  bootstrap successfully read and wrote files on request. The later Claude MVP could
+  exchange messages and reached tool use, but its filesystem-tool handling remained
+  unreliable."*
