@@ -250,13 +250,16 @@ end-to-end success statement.
 
 *Sourcing note: reconstructed 2026-07-14 from `live/notes/fresh-pass/airproject-bisect.md`
 and `live/notes/fresh-pass/airproject-history.md`, produced during a review of Scott's
-git, claude.ai, and ChatGPT archives. This document does not independently re-verify
-claims beyond what those two source documents state, and does not reproduce full
-conversation text — see the original archives (conversation UUIDs cited above) for
-anything beyond what's quoted here. The claude.ai-side conversations marked
-`[title-only]` in the source history document (identified by date/title but not
-opened) are not represented here at all; treat this timeline as complete for what it
-covers, not as a guarantee that nothing else exists in the unopened set.*
+git, claude.ai, and ChatGPT archives. §10–11 additionally draw on
+`live/notes/fresh-pass/airproject-codex-m4-report.md` (the verbatim Codex M4 report,
+saved 2026-07-14 evening after it was found to exist only as a synthesis here, not as
+its own artifact). This document does not independently re-verify claims beyond what
+those source documents state, and does not reproduce full conversation text — see the
+original archives (conversation UUIDs cited above) for anything beyond what's quoted
+here. The claude.ai-side conversations marked `[title-only]` in the source history
+document (identified by date/title but not opened) are not represented here at all;
+treat this timeline as complete for what it covers, not as a guarantee that nothing
+else exists in the unopened set.*
 
 ---
 
