@@ -1,0 +1,252 @@
+import os
+import openai
+import sys
+import json
+import shutil
+from datetime import datetime
+
+# Constants
+TARGET_FILE = sys.argv[0]  # The current script is the target file
+HISTORY_FILE = 'airproject_history.json'
+
+# Get OpenAI API key from environment variable
+print("Checking OpenAI API key...")
+openai.api_key = os.environ.get('OPENAI_API_KEY')
+if not openai.api_key:
+    print("Error: OPENAI_API_KEY environment variable not set.")
+    exit(1)
+else:
+    print("OpenAI API key found.")
+
+def read_file():
+    """Reads the contents of the target file."""
+    print("Reading the target file...")
+    try:
+        with open(TARGET_FILE, 'r', encoding='utf-8') as f:
+            return f.read()
+    except Exception as e:
+        print(f"Error reading file: {e}")
+        return ""
+
+def write_file(content):
+    """Overwrites the target file with the provided content."""
+    print("Creating a backup of the current target file...")
+    backup_file = TARGET_FILE + '.bak'
+    shutil.copyfile(TARGET_FILE, backup_file)
+    try:
+        print("Overwriting the target file...")
+        with open(TARGET_FILE, 'w', encoding='utf-8') as f:
+            f.write(content)
+        print("File written successfully.")
+    except Exception as e:
+        print(f"Error writing to file: {e}")
+        # Restore from backup in case of error
+        print("Restoring from backup...")
+        shutil.copyfile(backup_file, TARGET_FILE)
+        print("Restored the original file from backup.")
+
+def get_user_input():
+    """Prompts the user for input."""
+    print("Prompting the user for input...")
+    user_input = input("Please enter your request: ")
+    return user_input
+
+def log_conversation(role, content):
+    """Logs the conversation or function call to the history file in JSON format."""
+    print(f"Logging {role}'s message to history...")
+    
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Create a new log entry
+    new_entry = {
+        "timestamp": timestamp,
+        "role": role,
+        "content": content
+    }
+    
+    # If the history file doesn't exist, create a new list and append the entry
+    if not os.path.exists(HISTORY_FILE):
+        history_data = [new_entry]
+    else:
+        # If it exists, load the existing content and append the new entry
+        with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+            try:
+                history_data = json.load(f)
+            except json.JSONDecodeError:
+                history_data = []
+        history_data.append(new_entry)
+    
+    # Write the updated history back to the file in JSON format
+    with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
+        json.dump(history_data, f, indent=4)
+
+def log_function_call(function_name, arguments, result):
+    """Logs the function call and result to the history file."""
+    print(f"Logging function call: {function_name} with arguments: {arguments}")
+    
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    # Create a new log entry for the function call
+    new_entry = {
+        "timestamp": timestamp,
+        "role": "function_call",
+        "function": function_name,
+        "arguments": arguments,
+        "result": result
+    }
+    
+    # If the history file doesn't exist, create a new list and append the entry
+    if not os.path.exists(HISTORY_FILE):
+        history_data = [new_entry]
+    else:
+        # If it exists, load the existing content and append the new entry
+        with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+            try:
+                history_data = json.load(f)
+            except json.JSONDecodeError:
+                history_data = []
+        history_data.append(new_entry)
+    
+    # Write the updated history back to the file in JSON format
+    with open(HISTORY_FILE, 'w', encoding='utf-8') as f:
+        json.dump(history_data, f, indent=4)
+
+def load_conversation_history():
+    """Loads the conversation history from the JSON-formatted history file."""
+    print("Loading conversation history...")
+    
+    if not os.path.exists(HISTORY_FILE):
+        print("No history file found.")
+        return []
+    
+    try:
+        with open(HISTORY_FILE, 'r', encoding='utf-8') as f:
+            history_data = json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError) as e:
+        print(f"Error reading history file: {e}")
+        return []
+    
+    # Convert JSON entries to the message format expected by OpenAI
+    messages = []
+    for entry in history_data:
+        role = entry.get("role", "")
+        content = entry.get("content", "")
+        if role and content and role in ["user", "assistant"]:
+            messages.append({"role": role.lower(), "content": content})
+    
+    print(f"Loaded {len(messages)} messages from history.")
+    return messages
+
+def main():
+    print("Starting main function...")
+
+    # System prompt explaining the AI's role and available functions
+    system_prompt = """You are an AI assistant designed to improve and modify the code contained in the target file. You have access to two functions:
+
+1. read_file(): Returns the contents of the target file.
+2. write_file(content): Overwrites the target file with the provided content.
+
+When making any modifications, you must always provide the entire content of the file, including the parts that remain unchanged. Do not send partial updates. Ensure that any changes you make are functional and improve the code's performance, readability, and security.
+
+Your goal is to help improve the tool's code based on the user's input. Remember to maintain the code's existing functionality unless instructed otherwise."""
+
+    # Load conversation history and get user input
+    print("Loading system and user messages...")
+    messages = [{'role': 'system', 'content': system_prompt}]
+    messages.extend(load_conversation_history())
+    print("Prompting user for input...")
+    user_input = get_user_input()
+    messages.append({'role': 'user', 'content': user_input})
+    log_conversation('User', user_input)
+
+    # Define the functions available to the AI
+    functions = [
+        {
+            "name": "read_file",
+            "description": "Reads the contents of the target file and returns it as a string.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        },
+        {
+            "name": "write_file",
+            "description": "Overwrites the target file with the provided content.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "description": "The content to write to the target file."
+                    }
+                },
+                "required": ["content"]
+            }
+        }
+    ]
+
+    print("Starting AI interaction loop...")
+    # Interact with the AI assistant
+    while True:
+        try:
+            print("Calling OpenAI API for completion...")
+            response = openai.ChatCompletion.create(
+                model="gpt-4-0613",
+                messages=messages,
+                functions=functions,
+                function_call="auto",
+                temperature=0.7,
+                max_tokens=1500,
+            )
+            assistant_message = response['choices'][0]['message']
+            messages.append(assistant_message)
+
+            if assistant_message.get('function_call'):
+                function_name = assistant_message['function_call']['name']
+                arguments = assistant_message['function_call'].get('arguments')
+                print(f"AI requested function call: {function_name}")
+                try:
+                    function_args = json.loads(arguments) if arguments else {}
+                except json.JSONDecodeError:
+                    print("Error decoding arguments.")
+                    function_args = {}
+
+                # Execute the function
+                if function_name == 'read_file':
+                    result = read_file()
+                    log_function_call(function_name, function_args, result)
+                    messages.append({
+                        'role': 'function',
+                        'name': function_name,
+                        'content': result
+                    })
+                elif function_name == 'write_file':
+                    content_to_write = function_args.get('content', '')
+                    write_file(content_to_write)  # Always overwrite the file with the full content
+                    result = "File updated successfully."
+                    log_function_call(function_name, function_args, result)
+                else:
+                    result = f"Error: Function '{function_name}' not recognized."
+                    log_function_call(function_name, function_args, result)
+
+                # Append the function's result to the messages
+                messages.append({
+                    'role': 'function',
+                    'name': function_name,
+                    'content': result
+                })
+            else:
+                # No function call, output the assistant's reply
+                assistant_reply = assistant_message['content']
+                log_conversation('Assistant', assistant_reply)
+                print("\nAssistant:", assistant_reply)
+                break  # Exit the loop
+        except Exception as e:
+            print(f"Error during AI interaction: {e}")
+            break
+
+if __name__ == "__main__":
+    print("Program started.")
+    main()
+    print("Program ended.")
